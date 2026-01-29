@@ -1,889 +1,334 @@
 # Testing
 
-Changelog:
-
+Changelog
 - Fixed grammar, spelling, and punctuation.
-- Removed duplicated sections and reordered content for consistency.
-- Consolidated Testing Library query reference into one section.
+- Removed duplicated and out-of-order sections.
+- Consolidated Testing Library query information into one section.
 - Made code examples consistent (JSX/TSX) and fixed minor mistakes.
-- Added brief "What's next" suggestions at the end.
+- Added more examples for async behavior, user events, mocking, and forms.
+- Added detailed keyboard/clipboard/pointer APIs and provider examples.
+- Added brief "What's next" suggestions.
 
-As developers, our primary goal is to build software that works. To ensure that, we test the application and verify it behaves as expected.
+As developers, our primary goal is to build software that works. Tests help confirm that behavior and prevent regressions. This guide focuses on testing React components with Jest + React Testing Library (RTL) and practical examples showing common patterns.
 
 ## Table of contents
 
-1. Manual testing
-2. Automated testing
-3. Jest vs React Testing Library (RTL)
-4. Types of tests
-5. Testing pyramid
-6. RTL philosophy
-7. The `test` API (Jest)
-8. Example component and tests
-9. Test-Driven Development (TDD)
-10. Jest watch mode
-11. `only` and `skip`
-12. `describe`
-13. Filename conventions and aliases
-14. Coverage reporting in React with Jest + RTL
-15. Assertions
-16. What to test / What not to test
-17. RTL queries overview
-18. getByRole
-19. Testing Library query methods (reference)
-20. Example application component and tests
-21. Final notes
+1. Overview: manual vs automated testing  
+2. Jest vs React Testing Library (RTL)  
+3. Types of tests & the testing pyramid  
+4. RTL philosophy & testing goals  
+5. Jest basics: test API, describe, only/skip, watch mode  
+6. Common test patterns  
+7. Example components and tests (JSX + TSX)  
+8. User interactions: user-event vs fireEvent  
+9. Async tests: findBy, waitFor  
+10. Mocking (jest.fn, module mocks, fetch)  
+11. Queries: preferred order and examples  
+12. getAllBy*, queryBy*, findBy* usage  
+13. Coverage basics and jest config  
+14. Assertions: common matchers  
+15. What to test / what not to test  
+16. Debugging tests: screen.debug, logRoles  
+17. Testing playground & tools  
+18. Keyboard & advanced user interactions (type, keyboard, paste, select, tab, etc.)  
+19. Providers & custom render helpers (new)  
+20. Final notes and next steps
 
 ---
 
-## 1. Manual testing
+## 19. Providers & custom render helpers
 
-Manual testing is when a person opens the app and interacts with it to verify behavior.
+In real apps, components are often wrapped with context providers (Redux, Router, Theme, React Query, Intl, etc.). Tests should render components with the same providers they rely on. To avoid repetitive provider setup, create a reusable test renderer (a "renderWithProviders" helper) that wraps components in the necessary providers.
 
-Drawbacks:
+Below are examples and patterns (JSX + TSX) for common providers and a combined helper. Use whichever providers your app needs — mix-and-match as required.
 
-- Time-consuming
-- Error-prone for repetitive flows
-- Hard to scale for every feature
+### Why a custom render?
+- Keeps tests concise and focused on behavior.
+- Ensures provider configuration is consistent across tests.
+- Allows injecting initial state, routes, or query clients per test.
 
----
+### 1) Minimal helper using RTL's `render` wrapper option
 
-## 2. Automated testing
-
-Automated tests are programs that exercise your application and assert expected outcomes.
-
-Advantages:
-
-- Fast once written
-- Consistent and reliable
-- Easier to catch regressions
-- Increases confidence when shipping
-
-Core examples:
-
-- Jest + React Testing Library
-- Component testing (user interactions)
-- Components wrapped with providers
-- Mocking strategies
-- Static analysis / linting tests
-
----
-
-## 3. Jest vs React Testing Library (RTL)
-
-React Testing Library (RTL)
-
-- Utilities to render components into a virtual DOM.
-- Encourages testing behavior from a user perspective.
-- Promotes queries like `getByRole`, `getByText`, `getByLabelText`.
-
-Jest
-
-- Test runner + assertion library.
-- Runs tests, provides mocks, timers, snapshots, reporters.
-
-How they fit together:
-
-- Run tests with Jest, render and interact with components using RTL.
-
----
-
-## 4. Types of tests
-
-- Unit tests: test small units (functions/components) in isolation.
-- Integration tests: test interactions between parts (component + provider).
-- End-to-end (E2E) tests: test full user flows in a browser (Playwright, Cypress).
-
-Unit tests are fast and numerous; integration tests are moderate and more realistic; E2E are few and validate critical flows.
-
----
-
-## 5. Testing pyramid
-
-Recommended distribution:
-
-- E2E (few, high cost)
-- Integration (moderate)
-- Unit (many, low cost)
-
----
-
-## 6. RTL philosophy
-
-"The more your tests resemble the way your software is used, the more confidence they can give you."
-
-Goals:
-
-- Test user-visible behavior, not internal implementation.
-- Make tests resilient to refactors that don't change behavior.
-
----
-
-## 7. The `test` API (Jest)
-
-Signature:
-
-```js
-test(name, fn, timeout);
-```
-
-- `name` — string describing the test
-- `fn` — test function with expectations
-- `timeout` — optional timeout (default 5000 ms in Jest)
-
-Example:
-
-```js
-import { render, screen } from "@testing-library/react";
-import App from "./App";
-
-test("renders learn react link", () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
-});
-```
-
----
-
-## 8. Example component and tests
-
-Greet component (JSX):
-
+JSX example (basic)
 ```jsx
-// Greet.jsx
-export default function Greet({ name }) {
-  return (
-    <div>
-      <h1>Hello {name ? name : "World"}</h1>
-    </div>
-  );
+// test-utils.jsx
+import { render } from "@testing-library/react";
+
+export function renderWithProviders(ui, { wrapper } = {}) {
+  return render(ui, { wrapper });
 }
 ```
 
-Greet tests (JSX):
+You can pass a wrapper component (which itself composes providers) from each test. But a more ergonomic approach is to provide a ready-made wrapper that includes all commonly-used providers.
 
+### 2) Combined providers: Router + Theme + Redux + React Query
+
+Example uses:
+- react-redux (@reduxjs/toolkit)
+- react-router (MemoryRouter)
+- styled-components ThemeProvider (or any theme lib)
+- @tanstack/react-query (QueryClientProvider)
+
+JSX example
 ```jsx
-// Greet.test.jsx
-import { render, screen } from "@testing-library/react";
-import Greet from "./Greet";
+// test-utils.jsx
+import React from "react";
+import { render } from "@testing-library/react";
+import { Provider as ReduxProvider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { MemoryRouter } from "react-router-dom";
+import { ThemeProvider } from "styled-components"; // or your theming lib
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import rootReducer from "../src/store/rootReducer"; // replace with your root reducer
+import defaultTheme from "../src/theme"; // your theme
 
-test("renders default greet message", () => {
-  render(<Greet />);
-  expect(screen.getByText(/hello world/i)).toBeInTheDocument();
-});
+function createTestStore(preloadedState) {
+  return configureStore({
+    reducer: rootReducer,
+    preloadedState,
+  });
+}
 
-test("renders name passed via props", () => {
-  render(<Greet name="Srinivas" />);
-  expect(screen.getByText(/hello srinivas/i)).toBeInTheDocument();
+export function renderWithProviders(
+  ui,
+  {
+    preloadedState = {},
+    store = createTestStore(preloadedState),
+    route = "/",
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    theme = defaultTheme,
+    ...renderOptions
+  } = {},
+) {
+  function Wrapper({ children }) {
+    return (
+      <ReduxProvider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider theme={theme}>
+            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </ReduxProvider>
+    );
+  }
+  return { store, queryClient, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
+}
+```
+
+Usage in tests:
+```jsx
+// SomeComponent.test.jsx
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import SomeComponent from "./SomeComponent";
+import { renderWithProviders } from "../test-utils";
+
+test("shows value from redux and navigates", async () => {
+  const user = userEvent.setup();
+  const preloadedState = { auth: { user: { name: "Alice" } } };
+  const { store } = renderWithProviders(<SomeComponent />, { preloadedState, route: "/start" });
+
+  expect(screen.getByText(/alice/i)).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /next/i }));
+  // assert on navigation or store updates
+  expect(store.getState().someSlice.someFlag).toBe(true);
 });
 ```
 
-TypeScript variant:
+### 3) TypeScript variant
 
 ```tsx
-// Greet.tsx
-type GreetProps = { name?: string };
+// test-utils.tsx
+import React, { ReactElement } from "react";
+import { render, RenderOptions } from "@testing-library/react";
+import { Provider as ReduxProvider } from "react-redux";
+import { configureStore, EnhancedStore } from "@reduxjs/toolkit";
+import { MemoryRouter } from "react-router-dom";
+import { ThemeProvider } from "styled-components";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import rootReducer from "../src/store/rootReducer";
+import defaultTheme from "../src/theme";
 
-export default function Greet({ name }: GreetProps) {
+type ExtendedRenderOptions = Omit<RenderOptions, "queries"> & {
+  preloadedState?: Record<string, any>;
+  store?: EnhancedStore;
+  route?: string;
+  queryClient?: QueryClient;
+  theme?: any;
+};
+
+function createTestStore(preloadedState = {}) {
+  return configureStore({
+    reducer: rootReducer,
+    preloadedState,
+  });
+}
+
+export function renderWithProviders(
+  ui: ReactElement,
+  {
+    preloadedState = {},
+    store = createTestStore(preloadedState),
+    route = "/",
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    theme = defaultTheme,
+    ...renderOptions
+  }: ExtendedRenderOptions = {},
+) {
+  function Wrapper({ children }: { children?: React.ReactNode }) {
+    return (
+      <ReduxProvider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider theme={theme}>
+            <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </ReduxProvider>
+    );
+  }
+
+  return { store, queryClient, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
+}
+```
+
+### 4) Smaller examples (single providers)
+
+Redux-only:
+```jsx
+// redux-test-utils.jsx
+import { render } from "@testing-library/react";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import rootReducer from "../src/store/rootReducer";
+
+export function renderWithRedux(ui, { preloadedState = {}, store = configureStore({ reducer: rootReducer, preloadedState }) } = {}) {
+  return { store, ...render(<Provider store={store}>{ui}</Provider>) };
+}
+```
+
+Router-only (useful for components reading route params / location):
+```jsx
+// router-test-utils.jsx
+import { render } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+
+export function renderWithRouter(ui, { route = "/" } = {}) {
+  return render(<MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>);
+}
+```
+
+React Query only:
+```jsx
+// query-test-utils.jsx
+import { render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+export function renderWithQueryClient(ui, { queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }) } = {}) {
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
+```
+
+Styled-components / ThemeProvider only:
+```jsx
+// theme-test-utils.jsx
+import { render } from "@testing-library/react";
+import { ThemeProvider } from "styled-components";
+import defaultTheme from "../src/theme";
+
+export function renderWithTheme(ui, { theme = defaultTheme } = {}) {
+  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+}
+```
+
+### 5) Example: testing a component that uses multiple providers
+
+Component (simplified):
+```jsx
+// Profile.jsx
+import React from "react";
+import { useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+
+export default function Profile() {
+  const user = useSelector((s) => s.auth.user);
+  const { data } = useQuery(["profile", user?.id], () => fetch(`/api/profile/${user.id}`).then(r => r.json()));
+
+  if (!user) return <div>Not signed in</div>;
+  if (!data) return <div>Loading...</div>;
+
   return (
-    <div>
-      <h1>Hello {name ?? "World"}</h1>
-    </div>
+    <section>
+      <h1>{data.name}</h1>
+      <Link to="/settings">Settings</Link>
+    </section>
   );
 }
 ```
 
-Tests for TypeScript are the same as JS examples, assuming the test runner supports TypeScript.
+Test using `renderWithProviders`:
+```jsx
+// Profile.test.jsx
+import { screen } from "@testing-library/react";
+import { rest } from "msw";
+import { setupServer } from "msw/node";
+import Profile from "./Profile";
+import { renderWithProviders } from "../test-utils";
+
+const server = setupServer(
+  rest.get("/api/profile/1", (req, res, ctx) => res(ctx.json({ name: "Alice" }))),
+);
+
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+test("shows profile name and link", async () => {
+  const preloadedState = { auth: { user: { id: 1 } } };
+  renderWithProviders(<Profile />, { preloadedState });
+  expect(await screen.findByRole("heading", { name: /alice/i })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute("href", "/settings");
+});
+```
 
 Notes:
+- msw is recommended for network mocking in integration-like tests.
+- `renderWithProviders` returns `store` and `queryClient` if you need to inspect or manipulate them in tests.
 
-- Prefer queries that reflect user interactions (`getByRole`, `getByLabelText`) when applicable.
-- Make tests readable and behavior-focused.
+### 6) Utilities & best practices
 
----
+- Export a single `renderWithProviders` from your test utilities and re-export everything from RTL so test authors import from one place:
+  ```js
+  // setupTests.js (or test-utils.js)
+  import { render } from "@testing-library/react";
+  import { renderWithProviders as customRender } from "./test-utils";
 
-## 9. Test-Driven Development (TDD)
+  export * from "@testing-library/react";
+  export { customRender as render };
+  ```
+  Then in tests:
+  ```js
+  import { render, screen } from "../test-utils"; // now render is customRender
+  ```
 
-Cycle:
-
-1. Red — write a failing test describing desired behavior.
-2. Green — implement minimal code to pass the test.
-3. Refactor — improve code while keeping tests passing.
-
-TDD helps design and incremental development.
-
----
-
-## 10. Jest watch mode
-
-Watch reruns only tests related to changed files.
-
-Commands:
-
-- Start watch: `npm test -- --watch` or `yarn test --watch`
-- One-shot with coverage: `npm test -- --coverage --watchAll=false`
+- Keep provider defaults simple and allow overriding per test (initial route, preloaded state, theme, query client).
+- Reset or recreate query clients between tests to avoid cached query results bleeding across tests.
+- When testing routing, use `MemoryRouter` and `initialEntries` to control the location and route params.
 
 ---
 
-## 11. `only` and `skip`
-
-- `test.only(name, fn)` — run only this test
-- `test.skip(name, fn)` — skip this test
-
-Aliases: `it.only`, `it.skip`.
-
-Be careful to remove `.only` before merging.
-
----
-
-## 12. `describe`
-
-Group related tests:
-
-```js
-describe("Greet component", () => {
-  test("renders default greeting", () => {
-    /* ... */
-  });
-  test("renders with name prop", () => {
-    /* ... */
-  });
-
-  describe("edge cases", () => {
-    test("renders empty name as World", () => {
-      /* ... */
-    });
-  });
-});
-```
-
-Nested `describe` blocks help structure suites.
-
----
-
-## 13. Filename conventions and aliases
-
-Common file names:
-
-- `Component.test.tsx`
-- `Component.spec.tsx`
-
-Locations:
-
-- Next to implementation (co-located), or
-- Under `__tests__/` folder.
-
-Aliases:
-
-- `test` == `it`
-- `test.only` ↔ `fit`, `test.skip` ↔ `xit` (older aliases)
-
----
-
-## 14. Coverage reporting in React with Jest + RTL
-
-Quick summary:
-
-- Code coverage measures what parts of your code are executed by tests; Jest uses Istanbul for this.
-- Coverage is diagnostic — high coverage ≠ high-quality tests.
-
-Common metrics:
-
-- Statement coverage
-- Line coverage
-- Branch coverage
-- Function coverage
-
-Commands:
-
-- CRA:
-  - package.json: `"test:coverage": "react-scripts test --coverage"`
-  - Run: `npm run test:coverage` or `yarn test:coverage`
-  - CI one-shot: `CI=true npm test -- --coverage --watchAll=false`
-- Jest directly:
-  - `"test:coverage": "jest --coverage"`
-  - `npx jest --coverage --watchAll=false`
-
-What Jest produces:
-
-- Terminal summary
-- HTML report: `coverage/lcov-report/index.html`
-- `lcov.info` for Codecov/Coveralls
-- `coverage-final.json`
-
-Example `package.json` Jest snippet:
-
-```json
-"jest": {
-  "collectCoverageFrom": [
-    "src/**/*.{js,jsx,ts,tsx}",
-    "!src/**/*.test.{js,jsx,ts,tsx}",
-    "!src/**/index.{js,ts}",
-    "!src/**/*.stories.{js,jsx,ts,tsx}"
-  ]
-}
-```
-
-Example `jest.config.js`:
-
-```js
-// jest.config.js
-module.exports = {
-  collectCoverage: true,
-  collectCoverageFrom: [
-    "src/**/*.{js,jsx,ts,tsx}",
-    "!src/**/*.test.{js,jsx,ts,tsx}",
-    "!src/**/index.{js,ts}",
-    "!src/**/*.stories.{js,jsx,ts,tsx}",
-    "!src/**/*.d.ts",
-  ],
-  coverageDirectory: "coverage",
-  coverageReporters: ["text", "lcov", "cobertura"],
-  coverageThreshold: {
-    global: {
-      branches: 80,
-      functions: 80,
-      lines: 85,
-      statements: 85,
-    },
-  },
-  coveragePathIgnorePatterns: ["/node_modules/", "/dist/"],
-};
-```
-
-Ignoring files:
-
-- Use `collectCoverageFrom` (globs) or `coveragePathIgnorePatterns` (regex).
-- Common exclusions: tests, stories, `*.d.ts`, index re-exports, generated code. `node_modules` is automatic.
-
-Interpreting reports:
-
-- Look for low branch coverage or files with 0% (may be excluded or never imported).
-- Use the HTML report to see uncovered lines.
-- Upload `lcov.info` to Codecov/Coveralls in CI for PR comments and badges.
-
-RTL-specific guidance:
-
-- Write tests that mimic user interactions to exercise branches (different props, loading, error states).
-- Avoid tests that only poke at internals just to raise coverage.
-- Mocking child modules can hide uncovered code — mock carefully.
-
-CI integration (high-level):
-
-1. Run tests with coverage in CI.
-2. Upload `coverage/lcov.info` to Codecov/Coveralls (or save `coverage` as an artifact).
-3. Optionally fail CI via `coverageThreshold`.
-
----
-
-## 15. Assertions
-
-Assertions decide whether a test passes or fails.
-
-`expect`:
-
-```js
-expect(value).matcher(expected);
-```
-
-- Example matchers:
-  - `.toBe(value)` — strict equality
-  - `.toEqual(value)` — deep equality
-  - `.toBeTruthy()`, `.toBeNull()`, `.toBeDefined()`
-  - From jest-dom: `.toBeInTheDocument()`, `.toHaveTextContent()`, `.toHaveAttribute()`
-
-Example:
-
-```js
-expect(screen.getByText(/hello world/i)).toBeInTheDocument();
-```
-
----
-
-## 16. What to test / What not to test
-
-What to test:
-
-- Component renders
-- Component renders with props
-- Component renders in different states (loading, error, empty)
-- Component reacts to user events
-- Critical business logic and edge cases
-
-What not to test:
-
-- Implementation details (internal state, private methods)
-- Third-party library behavior
-- Trivial code that does not affect user-visible behavior
-
----
-
-## 17. RTL queries overview
-
-Typical test flow:
-
-1. Render the component with `render`.
-2. Find element(s) using queries.
-3. Assert expected outcome with `expect`.
-
-Query families:
-
-Single-element queries:
-
-- `getBy...` — returns element, throws if none or multiple
-- `queryBy...` — returns element or null, does not throw
-- `findBy...` — async, returns Promise, waits for element
-
-Multiple-element queries:
-
-- `getAllBy...`, `queryAllBy...`, `findAllBy...`
-
-Suffixes:
-
-- `Role`, `LabelText`, `PlaceholderText`, `Text`, `DisplayValue`, `AltText`, `Title`, `TestId`
-
-Preferred query priority (where possible):
-
-1. `getByRole`
-2. `getByLabelText`
-3. `getByPlaceholderText`
-4. `getByText`
-5. `getByDisplayValue`
-6. `getByAltText`
-7. `getByTitle`
-8. `getByTestId` (last resort)
-
-Use regex, case-insensitive flags, and options (e.g., `{ name: /.../i }`, `{ exact: false }`) to make matches flexible and robust.
-
----
-
-## 18. getByRole
-
-`getByRole` queries elements by ARIA role (semantic meaning). Many native elements have implicit roles:
-
-- `<button>` → role `button`
-- `<a>` → role `link`
-- `<h1>` → role `heading`
-- `<input type="checkbox">` → role `checkbox`
-
-You can also set an explicit `role` attribute on non-semantic elements.
-
-Benefits:
-
-- Encourages accessible markup.
-- Finds elements the way assistive tech would.
-- Can scope by accessible name and options (e.g., `{ name: /submit/i }`, `{ hidden: true }`).
-
-Example:
-
-```js
-// find a button with accessible name 'submit'
-const btn = screen.getByRole("button", { name: /submit/i });
-expect(btn).toBeEnabled();
-```
-
----
-
-## 19. Testing Library query methods (reference)
-
-Below are common DOM/query helpers used with Testing Library, with description, benefits, caveats, and a short example for each.
-
-- getByLabelText
-
-  - Queries form controls by accessible name derived from `<label>`, `aria-label`, or `aria-labelledby`.
-  - Benefits: mirrors how screen readers find controls.
-  - Example:
-    ```js
-    const emailInput = screen.getByLabelText(/email/i);
-    expect(emailInput).toHaveAttribute("type", "email");
-    ```
-
-- getByPlaceholderText
-
-  - Finds inputs/textareas by their `placeholder` attribute.
-  - Prefer labels for accessibility; use placeholders when appropriate.
-  - Example:
-    ```js
-    const search = screen.getByPlaceholderText(/search/i);
-    expect(search).toHaveValue("");
-    ```
-
-- getByText
-
-  - Finds elements by visible text content.
-  - Example:
-    ```js
-    const loadMore = screen.getByText(/load more/i);
-    expect(loadMore).toBeInTheDocument();
-    ```
-
-- getByDisplayValue
-
-  - Queries form controls by their displayed value.
-  - Useful for pre-filled or controlled inputs.
-  - Example:
-    ```js
-    const nameInput = screen.getByDisplayValue("Alice");
-    expect(nameInput).toHaveAttribute("name", "username");
-    ```
-
-- getByAltText
-
-  - Queries images/elements with role `img` by their `alt` attribute.
-  - Ensures images are accessible via alt text.
-  - Example:
-    ```js
-    const avatar = screen.getByAltText(/user avatar/i);
-    expect(avatar).toBeInTheDocument();
-    ```
-
-- getByTitle
-
-  - Finds elements by their `title` attribute.
-  - Used for tooltip-like descriptions or titles.
-  - Example:
-    ```js
-    const close = screen.getByTitle(/close/i);
-    expect(close).toBeVisible();
-    ```
-
-- getByTestId
-  - Queries elements by `data-testid`.
-  - Use as a last resort when no suitable accessible query exists.
-  - Example:
-    ```js
-    const empty = screen.getByTestId("user-list-empty");
-    expect(empty).toHaveTextContent(/no users/i);
-    ```
-
----
-
-## 20. Example application component and tests
-
-Application component:
-
-```jsx
-// Application.jsx
-export const Application = () => {
-  return (
-    <>
-      <h1>Job application form</h1>
-      <h2>Section 1</h2>
-      <p>All fields are mandatory</p>
-      <span title="close">X</span>
-      <img src="https://via.placeholder.com/150" alt="a person with a laptop" />
-      <div data-testid="custom-element">Custom HTML element</div>
-      <form>
-        <div>
-          <label htmlFor="name">Name</label>
-          <input
-            type="text"
-            id="name"
-            placeholder="Fullname"
-            value="Srinivas"
-            onChange={() => {}}
-          />
-        </div>
-        <div>
-          <label htmlFor="bio">Bio</label>
-          <textarea id="bio" />
-        </div>
-        <div>
-          <label htmlFor="job-location">Job location</label>
-          <select id="job-location">
-            <option value="">Select a country</option>
-            <option value="US">United States</option>
-            <option value="GB">United Kingdom</option>
-            <option value="CA">Canada</option>
-            <option value="IN">India</option>
-            <option value="AU">Australia</option>
-          </select>
-        </div>
-        <div>
-          <label>
-            <input type="checkbox" id="terms" /> I agree to the terms and
-            conditions
-          </label>
-        </div>
-        <button disabled>Submit</button>
-      </form>
-    </>
-  );
-};
-```
-
-Tests that exercise many RTL queries:
-
-```js
-// Application.test.jsx
-import { render, screen } from "@testing-library/react";
-import { Application } from "./Application";
-
-describe("Application", () => {
-  test("renders application form correctly using RTL queries", () => {
-    render(<Application />);
-
-    // getByRole
-    const nameInput = screen.getByRole("textbox", { name: /name/i });
-    expect(nameInput).toBeInTheDocument();
-
-    const bioInput = screen.getByRole("textbox", { name: /bio/i });
-    expect(bioInput).toBeInTheDocument();
-
-    const jobLocationSelect = screen.getByRole("combobox", {
-      name: /job location/i,
-    });
-    expect(jobLocationSelect).toBeInTheDocument();
-
-    const termsCheckbox = screen.getByRole("checkbox", {
-      name: /i agree to the terms and conditions/i,
-    });
-    expect(termsCheckbox).toBeInTheDocument();
-
-    const submitButton = screen.getByRole("button", { name: /submit/i });
-    expect(submitButton).toBeDisabled();
-
-    const headingH1 = screen.getByRole("heading", {
-      level: 1,
-      name: /job application form/i,
-    });
-    expect(headingH1).toBeInTheDocument();
-
-    const headingH2 = screen.getByRole("heading", {
-      level: 2,
-      name: /section 1/i,
-    });
-    expect(headingH2).toBeInTheDocument();
-
-    // getByLabelText
-    const nameByLabel = screen.getByLabelText(/name/i);
-    expect(nameByLabel).toBeInTheDocument();
-
-    const bioByLabel = screen.getByLabelText(/bio/i);
-    expect(bioByLabel).toBeInTheDocument();
-
-    const termsByLabel = screen.getByLabelText(
-      /i agree to the terms and conditions/i
-    );
-    expect(termsByLabel).toBeInTheDocument();
-
-    // getByPlaceholderText
-    const namePlaceholder = screen.getByPlaceholderText(/fullname/i);
-    expect(namePlaceholder).toBeInTheDocument();
-
-    // getByText
-    const mandatoryText = screen.getByText(/all fields are mandatory/i);
-    expect(mandatoryText).toBeInTheDocument();
-
-    // getByDisplayValue
-    const displayValue = screen.getByDisplayValue("Srinivas");
-    expect(displayValue).toBeInTheDocument();
-
-    // getByAltText
-    const image = screen.getByAltText(/a person with a laptop/i);
-    expect(image).toBeInTheDocument();
-
-    // getByTitle
-    const closeIcon = screen.getByTitle(/close/i);
-    expect(closeIcon).toBeInTheDocument();
-
-    // getByTestId
-    const customElement = screen.getByTestId("custom-element");
-    expect(customElement).toBeInTheDocument();
-  });
-});
-```
-
----
-
-## 21. getAllBy''(role)
-
-1. `getALLByRole`
-2. `getAllByLabelText`
-3. `getALlByPlaceholderText`
-4. `getALlByText`
-5. `getALlByDisplayValue`
-6. `getAllByAltText`
-7. `getAllByTitle`
-8. `getALlByTestId` (last resort)
-
-Synchronous.
-Returns an array of matching elements.
-Throws if there are zero matches.
-Use when you expect one-or-more elements (e.g., multiple list items) and want to assert the count or inspect each item.
-
-````js
-import { useState, useEffect } from 'react'
-import { SkillsProps } from './Skills.types'
-
-export const Skills = (props: SkillsProps) => {
-  const { skills } = props
-  return (
-    <>
-      <ul>
-        {skills.map((skill) => {
-          return <li key={skill}>{skill}</li>
-        })}
-      </ul>
-    </>
-  )
-}
-
-import { render, screen } from "@testing-library/react";
-import { Skills } from "./Skills";
-
-describe("Skills", () => {
-  const skills = ["javascript", "reactjs", "Nextjs"];
-
-  test("renders skills correctly", () => {
-    render(<Skills skills={skills} />);
-    const listElement = screen.getByRole("list");
-    expect(listElement).toBeInTheDocument();
-  });
-
-  test("skills item renders correctly", () => {
-    render(<Skills skills={skills} />);
-    const listElements = screen.getAllByRole("listitem");
-    expect(listElements).toHaveLength(3);
-  });
-
-});
-
-``
-
-## 23. queryBy()
-
-  getByRole(...) — synchronous, returns the element if exactly one match is found, and throws an error if zero or multiple matches. Good when you expect an element to be present immediately.
-  queryByRole(...) — synchronous, returns the element if exactly one match is found, returns null if none, and throws if multiple matches. Good for asserting absence (or optional elements).
-
-``` js
-import { useState, useEffect } from 'react'
-export const Skills = (props: SkillsProps) => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-
-  useEffect(() => {
-    setTimeout(() => {
-      setIsLoggedIn(true)
-    }, 1001)
-  }, [])
-
-  return (
-    <>
-      {isLoggedIn ? (
-        <button>Start learning</button>
-      ) : (
-        <button onClick={() => setIsLoggedIn(true)}>Login</button>
-      )}
-    </>
-  )
-}
-
-import { render, screen } from "@testing-library/react";
-import { Skills } from "./Skills";
-
-describe("Skills", () => {
-  const skills = ["javascript", "reactjs", "Nextjs"];
-  test("Login button", () => {
-    render(<Skills skills={skills} />);
-    const LoginButton = screen.getByRole("button",{
-        name:"Login"
-    });
-    expect(LoginButton).toBeInTheDocument();
-  });
-
-  test("not renders Start learning",() =>{
-    render(<Skills skills={skills}/>);
-    const StartlearningButton = screen.queryByRole("button",{
-        name:"Start learning"
-    })
-
-    expect(StartlearningButton).not.toBeInTheDocument()
-  })
-});
-
-
-````
-
-## 23. findByRole(...)
-
-async, returns a Promise that resolves to the element (or rejects) after waiting — use for elements that appear after async behavior.
-
-```js
-import { useState, useEffect } from "react";
-import { SkillsProps } from "./Skills.types";
-
-export const Skills = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    setTimeout(() => {
-      setIsLoggedIn(true);
-    }, 1000);
-  }, []);
-  return (
-    <>
-      {isLoggedIn ? (
-        <button>Start learning</button>
-      ) : (
-        <button onClick={() => setIsLoggedIn(true)}>Login</button>
-      )}
-    </>
-  );
-};
-
-import { render, screen } from "@testing-library/react";
-import { Skills } from "./Skills";
-
-describe("Skills", () => {
-  test("Start learning button slowly displaying", async () => {
-    render(<Skills />);
-    const startLearingButton = await screen.findByRole(
-      "button",
-      {
-        name: "Start learning",
-      },
-      { timeout: 2000 }
-    );
-    expect(startLearingButton).toBeInTheDocument();
-  });
-});
-```
-
-## 22. getByText
-
-getByText will search for all elements that have a text node with textContent matching the text
-Typically, you'd use this to find paragraph, div or span elements
-
-TextMatch - string
-
-<div>Hello World</div>
-screen.getByText('Hello World') // full string match
-screen.getByText('llo Worl', {exact: false}) // substring match
-screen.getByText('hello world', {exact: false}) // ignore case
-
-TextMatch - custom function
-(content?: string, element?: Element | null) => boolean
-
-<div>Hello World</div>
-screen.getByText((content) => content.startsWith('Hello'))
-
-## 22. Final notes
-
-- Aim for readable, behavior-focused tests that mimic user interactions.
-- Test through public component behavior and UI rather than internals.
-- Keep tests deterministic, maintainable, and fast where possible.
-- Use a balanced mix of unit, integration, and E2E tests based on the testing pyramid.
-
-If you’d like, I can:
-
-- Convert this document into a repository `README.md` or `CONTRIBUTING.md`,
-- Provide a ready-to-drop `jest.config.js` tailored to your project,
-- Create example tests for a specific component in your codebase,
-- Or generate a GitHub Actions workflow that runs tests and uploads coverage.
-
-Which would you like next?
-
-```
-
-```
+## Final notes
+
+- Aim for readable, behavior-focused tests that reflect how users use your app.
+- Keep tests fast and deterministic; choose the appropriate test type (unit/integration/E2E).
+- Use coverage as a guide, not a goal: write meaningful tests rather than trying to hit a percentage.
+- Make your tests accessibility-focused: using `getByRole` helps both testing and product accessibility.
+
+What's next? I can:
+- Convert this into a polished `CONTRIBUTING.md` or repository `README.md` (this file),
+- Create a ready-to-drop `jest.config.js` tailored to your stack,
+- Generate example tests for a specific component from your codebase,
+- Create a GitHub Actions workflow that runs tests and uploads coverage.
+
+Which would you like me to do next?

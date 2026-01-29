@@ -1,6 +1,7 @@
 import { Application } from "./components/application/Application";
 import Greet from "./components/Greet/Greet";
 import "./App.css";
+import Counter from "./components/counter/Counter"
 
 function App() {
   return (
@@ -8,6 +9,7 @@ function App() {
       <Application />
       <Greet />
       <p>learn react</p>
+      <Counter/>
     </div>
   );
 }
